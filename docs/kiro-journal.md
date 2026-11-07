@@ -39,3 +39,17 @@ Notes for the Kiro write-up. Keep them true and specific.
 - Kiro (Sonnet 4.5) added P9, which starts from every reachable alphabet state and checks that a late suggestion never moves the patient's select to a different option.
 - Mutation check by Claude Code: six realistic bugs were planted one at a time in `sweep.ts`, and all six made tests fail. P9 is the only test that catches a lost control highlight. An earlier run looked like a miss, but the harness hadn't planted that bug because of Windows line endings.
 - Total for the sweep-logic spec: about 14 credits.
+- Task 4, playable-needs-ring: Kiro CLI (Sonnet 4.5) wrote the spec. Review found five design problems before any code existed:
+  - Effects were written to a ref inside the reducer, so speech would never fire.
+  - The integration test pressed twice within the 500 ms filter and ticked to the wrong option.
+  - The ticker test tested a copy of the logic, not the real module.
+  - There was no way to report a speech failure.
+  - Space could still click a focused button.
+- Kiro (Haiku 4.5) fixed the spec and built it. All 79 tests passed on the first run, but code review found three real bugs the tests missed:
+  - A new speaker on every render repeated the last message on every tick.
+  - The keyboard listener and its 500 ms filter were rebuilt on every render.
+  - An old bell timer could hide a newer "Calling for help" notice early.
+- Kiro fixed all three. Its first tests for them failed or proved little: the walk-through selected the wrong options, the repeat test used an injected speaker that couldn't show the bug, and Apps leaked between tests. Kiro (Sonnet 4.5) rewrote the tests from an exact script.
+- Bug check by Claude Code: each of the three bugs was put back into App.tsx temporarily. The first bell test missed the timer bug, because its second bell came after the first timer had expired. After one more fix, all three are caught.
+- Browser check by Claude Code: woke the board with Space, chose Pain, Chest and Bad as each came round, saw the hold screen, and confirmed the message was spoken exactly once and stayed on screen. Speech was replaced with a recorder for this check.
+- Task 4 cost about 11.7 credits. The running total is about 26 of 50 free credits.
