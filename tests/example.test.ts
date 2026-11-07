@@ -1,0 +1,11 @@
+import { describe, it, expect } from 'vitest';
+
+describe('Setup verification', () => {
+  it('should pass a simple test', () => {
+    expect(true).toBe(true);
+  });
+
+  it('should verify basic math', () => {
+    expect(2 + 2).toBe(4);
+  });
+});

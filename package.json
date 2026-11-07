@@ -1,0 +1,33 @@
+{
+  "name": "planchette",
+  "version": "1.0.0",
+  "description": "A talking board for people who suddenly can't speak",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "talking-board",
+    "communication",
+    "accessibility"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "@preact/preset-vite": "^2.10.6",
+    "@types/node": "^22.9.0",
+    "fast-check": "^3.20.0",
+    "jsdom": "^29.1.1",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8"
+  },
+  "dependencies": {
+    "preact": "^10.23.2"
+  }
+}

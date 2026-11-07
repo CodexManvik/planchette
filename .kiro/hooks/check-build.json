@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Check build when the agent stops",
+      "description": "Runs the production build after each agent turn.",
+      "trigger": "Stop",
+      "action": {
+        "type": "command",
+        "command": "npm run build"
+      },
+      "timeout": 120
+    }
+  ]
+}
