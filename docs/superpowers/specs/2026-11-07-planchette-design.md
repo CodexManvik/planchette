@@ -127,7 +127,7 @@ The core path is: inputs, one `select` event, sweep logic, display and output.
 - Only spelled text goes to the AI service, and no account or patient identity is collected.
 - Planchette is a communication aid, not a medical device, and doesn't replace a hospital nurse-call system.
 - We make no clinical claims. The SpeakFaster result comes from two ALS users typing with eye gaze, so it can be cited as background only.
-- The word "Ouija" is not used in the product, repo, or video, because it's a Hasbro trademark. Use "talking board". Check the name "Planchette" before submitting.
+- The name of the commercial board game is not used in the product, repo, or video, because it's a Hasbro trademark. Use "talking board". Check the name "Planchette" before submitting.
 - Anyone shown in the video gives consent, and nobody is presented as a real patient unless they are one and agree.
 
 ## Out of scope for this version

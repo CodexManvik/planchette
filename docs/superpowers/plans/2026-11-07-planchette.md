@@ -14,7 +14,7 @@
 
 - Submission deadline is 2026-12-04 2:00 PM PT (2026-12-05 3:30 AM IST). Aim to submit by 2026-12-03.
 - All application code comes from Kiro. `/.kiro` stays in the repo root and must never be ignored.
-- The word "Ouija" never appears in the product, repo, or video. Use "talking board".
+- The trademarked name of the commercial board game never appears in the product, repo, or video. Use "talking board".
 - No clinical claims. Planchette is a communication aid, not a medical device.
 - Video is never uploaded or recorded in normal use. Only spelled text goes to the AI service.
 - Tone is warm and elegant, never horror.
@@ -163,7 +163,7 @@ Create these in `.kiro/steering/`. Ask Kiro to draft them from the design spec, 
 | `tech.md` | always | The stack above. fast-check for property tests, Vitest for tests, no new dependency without asking |
 | `structure.md` | always | The file structure above. Sweep logic is pure and has no DOM access |
 | `accessibility.md` | `fileMatch` on `src/ui/**` | Large text readable from a bed, strong contrast, reduced-motion support, no flashing |
-| `tone.md` | `fileMatch` on `src/**` and `docs/**` | Warm, never horror. No "Ouija". No clinical claims. Include examples of what not to write |
+| `tone.md` | `fileMatch` on `src/**` and `docs/**` | Warm, never horror. No trademarked game name. No clinical claims. Include examples of what not to write |
 
 Reference the spec from `product.md` with `#[[file:docs/superpowers/specs/2026-11-07-planchette-design.md]]`.
 
