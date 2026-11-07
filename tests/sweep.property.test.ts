@@ -27,25 +27,28 @@ describe('Sweep Logic Property Tests', () => {
   const SENTENCE_POOL = ['I need water', 'Please help me', 'Call the nurse'];
 
   const stepArb: fc.Arbitrary<Step> = fc.oneof(
-    fc.constant<Step>({ kind: 'tick' }),
-    fc.constant<Step>({ kind: 'select' }),
-    fc.record({
-      kind: fc.constant('suggest' as const),
-      items: fc.array(
-        fc.oneof(
-          fc.record({
-            text: fc.constantFrom(...WORD_POOL),
-            kind: fc.constant('word' as const)
-          }),
-          fc.record({
-            text: fc.constantFrom(...SENTENCE_POOL),
-            kind: fc.constant('sentence' as const)
-          })
+    { arbitrary: fc.constant<Step>({ kind: 'tick' }), weight: 6 },
+    { arbitrary: fc.constant<Step>({ kind: 'select' }), weight: 2 },
+    {
+      arbitrary: fc.record({
+        kind: fc.constant('suggest' as const),
+        items: fc.array(
+          fc.oneof(
+            fc.record({
+              text: fc.constantFrom(...WORD_POOL),
+              kind: fc.constant('word' as const)
+            }),
+            fc.record({
+              text: fc.constantFrom(...SENTENCE_POOL),
+              kind: fc.constant('sentence' as const)
+            })
+          ),
+          { maxLength: 3 }
         ),
-        { maxLength: 3 }
-      ),
-      stale: fc.boolean()
-    })
+        stale: fc.boolean()
+      }),
+      weight: 2
+    }
   );
 
   interface Transition {
@@ -437,6 +440,29 @@ describe('Sweep Logic Property Tests', () => {
     );
   });
 
+  function generateSuggestionList(preferDifferentLength: boolean): Suggestion[] {
+    const maxLen = preferDifferentLength
+      ? fc.sample(fc.integer({ min: 0, max: 3 }), 1)[0]
+      : fc.sample(fc.integer({ min: 0, max: 3 }), 1)[0];
+
+    return fc.sample(
+      fc.array(
+        fc.oneof(
+          fc.record({
+            text: fc.constantFrom(...WORD_POOL),
+            kind: fc.constant('word' as const)
+          }),
+          fc.record({
+            text: fc.constantFrom(...SENTENCE_POOL),
+            kind: fc.constant('sentence' as const)
+          })
+        ),
+        { minLength: 0, maxLength: maxLen }
+      ),
+      1
+    )[0];
+  }
+
   // P8: Stale suggestions are no-ops
   it('P8: stale suggestions leave state unchanged except matching ones change suggestions and index', () => {
     fc.assert(
@@ -463,6 +489,104 @@ describe('Sweep Logic Property Tests', () => {
           }
         }
       }),
+      { numRuns: 1000 }
+    );
+  });
+
+  // P9: Suggestion changes preserve highlighted option in alphabet layer
+  it('P9: new suggestions keep group/control highlighted and select lands on same option', () => {
+    // Build all reachable alphabet states
+    const allStates = bfsReachable();
+    const alphabetStates = allStates.filter((s) => s.layer === 'alphabet');
+
+    // Augment with alphabet states that have suggestions by applying matching suggestion events
+    const augmentedStates: SweepState[] = [...alphabetStates];
+
+    for (const baseState of alphabetStates) {
+      if (baseState.suggestions.length === 0) {
+        // Add suggestions, then tick 0-12 times to reach different index positions
+        const withSuggestions: Suggestion[] = generateSuggestionList(false);
+        const sugResult = next(
+          baseState,
+          { type: 'suggestions', items: withSuggestions, forDraft: baseState.draft },
+          board
+        );
+
+        augmentedStates.push(sugResult.state);
+
+        // Tick through sweep to get different index positions
+        let tickState = sugResult.state;
+        for (let i = 0; i < 12; i++) {
+          const tickResult = next(tickState, { type: 'tick' }, board);
+          augmentedStates.push(tickResult.state);
+          tickState = tickResult.state;
+        }
+      }
+    }
+
+    // Run property test over all augmented alphabet states
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 0, max: augmentedStates.length - 1 }),
+        fc.integer({ min: 0, max: 3 }),
+        fc.boolean(),
+        (stateIndex, newSuggestionCount, forceDifferentLength) => {
+          const prevState = augmentedStates[stateIndex];
+
+          // Generate new suggestions with usually different length
+          const newSuggestions = generateSuggestionList(
+            forceDifferentLength || newSuggestionCount !== prevState.suggestions.length
+          );
+
+          const sugEvent: SweepEvent = {
+            type: 'suggestions',
+            items: newSuggestions,
+            forDraft: prevState.draft
+          };
+
+          const result = next(prevState, sugEvent, board);
+          const nextState = result.state;
+
+          const prevHighlight = highlighted(prevState);
+          const nextHighlight = highlighted(nextState);
+
+          // If previous highlight was a suggestion that no longer exists, must move to group:0
+          if (prevHighlight.startsWith('suggestion:')) {
+            const prevText = prevHighlight.split(':').slice(1).join(':');
+            const stillExists = newSuggestions.some((s) => s.text === prevText);
+
+            if (!stillExists) {
+              expect(nextHighlight).toBe('group:0');
+            } else {
+              expect(nextHighlight).toBe(prevHighlight);
+            }
+          } else {
+            // Group or control: must stay highlighted
+            expect(nextHighlight).toBe(prevHighlight);
+          }
+
+          // Now verify select lands on same option in both states
+          const prevSelectResult = next(prevState, { type: 'select' }, board);
+          const nextSelectResult = next(nextState, { type: 'select' }, board);
+
+          // Unless a highlighted suggestion was removed, draft, layer, and groupIndex must match
+          if (prevHighlight.startsWith('suggestion:')) {
+            const prevText = prevHighlight.split(':').slice(1).join(':');
+            const stillExists = newSuggestions.some((s) => s.text === prevText);
+
+            if (stillExists) {
+              expect(nextSelectResult.state.draft).toBe(prevSelectResult.state.draft);
+              expect(nextSelectResult.state.layer).toBe(prevSelectResult.state.layer);
+              expect(nextSelectResult.state.groupIndex).toBe(prevSelectResult.state.groupIndex);
+            }
+          } else {
+            // Group or control: select result must be identical
+            expect(nextSelectResult.state.draft).toBe(prevSelectResult.state.draft);
+            expect(nextSelectResult.state.layer).toBe(prevSelectResult.state.layer);
+            expect(nextSelectResult.state.groupIndex).toBe(prevSelectResult.state.groupIndex);
+          }
+        }
+      ),
       { numRuns: 1000 }
     );
   });
