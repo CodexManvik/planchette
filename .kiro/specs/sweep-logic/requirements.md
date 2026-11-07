@@ -22,7 +22,7 @@ Each layer displays one or more options. The sweep moves through them with each 
 Every say value is a complete sentence. Fragments are joined with a single space, never ". ".
 
 **Pain:** no say value, opens the location node.
-- Locations: Head "Pain in my head.", Chest "Pain in my chest.", Stomach "Pain in my stomach.", Back "Pain in my back.", Arm or leg "Pain in my arm or leg.", Other "Pain somewhere else."
+- Locations: Head "Pain in my head.", Chest "Pain in my chest.", Stomach "Pain in my stomach.", My back "Pain in my back.", Arm or leg "Pain in my arm or leg.", Other "Pain somewhere else."
 - Each location opens the severity node: A little "It hurts a little.", Bad "It's bad.", Very bad "It's very bad." (bell).
 - Every severity option has a Back option.
 
@@ -48,7 +48,7 @@ Every say value is a complete sentence. Fragments are joined with a single space
 
 **Spell:** action 'spell'. No follow-up.
 
-Every follow-up node ends with a Back option with action 'back'. The needs root has no Back. The "Back" location and the 'back' action are different things; give the location option a distinct id.
+Every follow-up node ends with a "Go back" option with action 'back'. The needs root has no Back. The "Back" location and the 'back' action are different things; give the location option a distinct id.
 
 ## Requirements
 
@@ -67,12 +67,16 @@ WHEN the state is at rest AND a tick arrives THE SYSTEM SHALL change nothing and
 
 **User story:** The patient signals readiness to communicate.
 
-WHEN the state is at rest AND a select arrives THE SYSTEM SHALL move to needs at the first option, or move to alphabet if a draft already exists.
+WHEN the state is at rest AND a select arrives THE SYSTEM SHALL reset nodeId to the root, path to [], fragments to [], groupIndex to null, held to null, set index to 0, reset idleSweeps to 0. If draft is non-empty, move to alphabet; otherwise move to needs.
 
 **Acceptance criteria:**
-1. Selecting from rest opens the needs ring at index 0.
-2. If the draft is non-empty when rest is reached, the next select opens alphabet at index 0 instead.
-3. idleSweeps is reset to 0.
+1. Selecting from rest opens the needs ring at index 0 if draft is empty.
+2. If the draft is non-empty when select arrives, the state opens alphabet at index 0 instead.
+3. path is set to [].
+4. fragments is set to [].
+5. groupIndex is set to null.
+6. held is set to null.
+7. idleSweeps is reset to 0.
 
 ### R3: Tick in Active Layer (advance options)
 
@@ -102,11 +106,11 @@ WHEN two full sweeps pass with no select (idleSweeps reaches 2) THE SYSTEM SHALL
 
 **User story:** Selecting a need opens follow-ups; selecting a follow-up location opens severity; selecting severity completes the message.
 
-WHEN a select chooses an option with a `goto` field THE SYSTEM SHALL push the current nodeId onto path, add the option's `say` fragment to fragments, open the target node, set layer to followup, set index to 0, reset idleSweeps to 0, and produce no effects. (added)
+WHEN a select chooses an option with a `goto` field THE SYSTEM SHALL push the current nodeId onto path, push the option's `say` value to fragments if present or an empty string `''` if not, open the target node, set layer to followup, set index to 0, reset idleSweeps to 0, and produce no effects.
 
 **Acceptance criteria:**
 1. The current nodeId is pushed onto path.
-2. The say fragment is pushed to the fragments array only if the option has a say value.
+2. If the option has a say value, it is pushed to fragments; otherwise `''` (empty string) is pushed.
 3. nodeId changes to the goto target.
 4. layer is set to followup.
 5. index is set to 0.
@@ -117,11 +121,11 @@ WHEN a select chooses an option with a `goto` field THE SYSTEM SHALL push the cu
 
 **User story:** Selecting the final option (e.g., "Very bad") moves the message to hold for review.
 
-WHEN a select chooses an option with no `goto` field THE SYSTEM SHALL add the option's `say` fragment, join all fragments with a single space to form the held message, set held.source to 'board', move to hold, set index to 0, and produce no effects. (added)
+WHEN a select chooses an option with no `goto` field THE SYSTEM SHALL push the option's `say` value to fragments (if present), filter fragments to include only non-empty strings, join them with a single space to form the held message, set held.source to 'board', move to hold, set index to 0, and produce no effects.
 
 **Acceptance criteria:**
-1. The final say fragment is added to fragments if present.
-2. The held message is formed by joining fragments with a single space.
+1. If the option has a say value, it is pushed to fragments; otherwise fragments is left unchanged.
+2. The held message is formed by joining only non-empty fragments with a single space: `fragments.filter(f => f.length > 0).join(' ')`.
 3. held.source is set to 'board'.
 4. layer is set to hold.
 5. held.text contains the complete message.
@@ -133,11 +137,11 @@ WHEN a select chooses an option with no `goto` field THE SYSTEM SHALL add the op
 
 **User story:** The patient changes their mind about a detail and wants to revise.
 
-WHEN a select chooses an option with action 'back' THE SYSTEM SHALL pop path to get the previous nodeId, remove the last fragment from the fragments array only if the option that opened this node added one, set index to 0, reset idleSweeps, and produce no effects. (added)
+WHEN a select chooses an option with action 'back' THE SYSTEM SHALL pop path to restore the previous nodeId, always pop exactly one entry from fragments, set index to 0, reset idleSweeps to 0, and produce no effects.
 
 **Acceptance criteria:**
 1. path.pop() restores the previous nodeId.
-2. fragments.pop() removes the last entry only if the opening option had a say value.
+2. fragments.pop() always removes exactly one entry (which may be an empty string if the opening option had no say value).
 3. layer is set to followup if path is non-empty, or needs if path is empty.
 4. index is set to 0.
 5. idleSweeps is reset to 0.
@@ -231,11 +235,11 @@ WHEN a select chooses a word suggestion THE SYSTEM SHALL replace the partial wor
 
 **User story:** A complete sentence suggestion or the Speak button moves the message into the hold state.
 
-WHEN a select chooses a sentence suggestion THE SYSTEM SHALL set held.text to the suggestion text, set held.source to 'draft', move to the hold layer, set index to 0, reset idleSweeps to 0, and produce no effects. WHEN a select chooses the Speak control with a non-empty draft THE SYSTEM SHALL set held.text to the current draft, set held.source to 'draft', move to the hold layer, set index to 0, reset idleSweeps to 0, and produce no effects. WHEN a select chooses the Speak control with an empty or whitespace-only draft THE SYSTEM SHALL stay in the alphabet layer and do nothing. (added)
+WHEN a select chooses a sentence suggestion THE SYSTEM SHALL set held.text to the suggestion text, set held.source to 'draft', move to the hold layer, set index to 0, reset idleSweeps to 0, and produce no effects. WHEN a select chooses the Speak control with a non-empty draft THE SYSTEM SHALL set held.text to draft.trim(), set held.source to 'draft', move to the hold layer, set index to 0, reset idleSweeps to 0, and produce no effects. WHEN a select chooses the Speak control with an empty or whitespace-only draft THE SYSTEM SHALL stay in the alphabet layer and do nothing.
 
 **Acceptance criteria:**
 1. If a sentence suggestion: held.text is set to the suggestion text and held.source is set to 'draft'.
-2. If Speak with non-empty draft: held.text is set to the draft and held.source is set to 'draft'.
+2. If Speak with non-empty draft: held.text is set to draft.trim() and held.source is set to 'draft'.
 3. If Speak with empty or whitespace-only draft: no state change, no effects.
 4. layer is set to hold only when entering hold.
 5. index is set to 0 only when entering hold.
@@ -292,7 +296,7 @@ WHEN a select chooses the Needs control in the alphabet layer THE SYSTEM SHALL r
 
 **User story:** During the hold step, the message is spoken, the bell may ring, and the board is ready for the next message.
 
-WHEN a tick arrives during hold THE SYSTEM SHALL emit a speak effect with the held message, emit a bell effect if held.bell is true, set lastMessage to the held message, clear the draft only if held.source is 'draft', clear fragments, move to the needs layer at the root, set index to 0, set path to empty, set held to null, reset idleSweeps to 0, and produce no further effects. (added)
+WHEN a tick arrives during hold THE SYSTEM SHALL emit a speak effect with the held message, emit a bell effect if held.bell is true, set lastMessage to the held message, clear the draft only if held.source is 'draft', set fragments to [], set path to [], set nodeId to the needs ring root, set groupIndex to null, set held to null, move to the needs layer, set index to 0, reset idleSweeps to 0, and produce no further effects.
 
 **Acceptance criteria:**
 1. A speak effect is emitted with the held message text.
@@ -301,13 +305,14 @@ WHEN a tick arrives during hold THE SYSTEM SHALL emit a speak effect with the he
 4. If held.source is 'draft', draft is cleared to an empty string.
 5. If held.source is 'board', draft is preserved unchanged.
 6. fragments is set to an empty array.
-7. layer is set to needs.
-8. nodeId is set to the needs ring root.
-9. path is set to empty.
-10. held is set to null.
-11. index is set to 0.
-12. idleSweeps is reset to 0.
-13. No other effects are emitted.
+7. path is set to an empty array.
+8. groupIndex is set to null.
+9. layer is set to needs.
+10. nodeId is set to the needs ring root.
+11. held is set to null.
+12. index is set to 0.
+13. idleSweeps is reset to 0.
+14. No other effects are emitted.
 
 ### R19: Select During Hold (cancel, emit nothing)
 
@@ -327,7 +332,7 @@ WHEN a select arrives during hold THE SYSTEM SHALL cancel the message, produce n
 
 **User story:** As the draft changes, the predictor (local or AI) sends new suggestions to display.
 
-WHEN a suggestions event arrives THE SYSTEM SHALL check if forDraft matches the current draft. If it differs, ignore the event. If it matches, replace the suggestions array with the new items, keep the highlighted item the same in the alphabet layer, and produce no effects. The event never resets idleSweeps and never emits effects. (added)
+WHEN a suggestions event arrives THE SYSTEM SHALL check if forDraft matches the current draft. If it differs, ignore the event. If it matches, replace the suggestions array with the new items, keep the highlighted item the same in the alphabet layer, and produce no effects. The event never resets idleSweeps and never emits effects.
 
 **Acceptance criteria:**
 1. If forDraft differs from draft, the event is ignored entirely.
@@ -337,6 +342,7 @@ WHEN a suggestions event arrives THE SYSTEM SHALL check if forDraft matches the 
 5. idleSweeps is not reset.
 6. No effects are emitted.
 7. No layer or nodeId change occurs.
+8. If the suggestions event arrives during hold, the suggestions array is updated only if forDraft matches; hold is not interrupted.
 
 ### R21: Index Bounds
 
