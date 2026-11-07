@@ -300,4 +300,137 @@ describe('App integration', () => {
     // Button should say Pause again
     expect(pauseButton?.textContent).toBe('Pause');
   });
+
+  it('camera mode can be switched with signal mode controls', () => {
+    const mockCreateCamera = vi.fn(() => ({
+      start: vi.fn(),
+      stop: vi.fn()
+    }));
+
+    act(() => {
+      render(
+        <App
+          speaker={mockSpeaker}
+          now={now}
+          initialStepMs={stepMs}
+          createCamera={mockCreateCamera}
+        />,
+        container
+      );
+    });
+
+    // Find signal mode radios
+    const radios = container.querySelectorAll('input[type="radio"]');
+    const blinkRadio = Array.from(radios).find((r) => (r as HTMLInputElement).value === 'blink') as HTMLInputElement;
+
+    expect(blinkRadio).toBeDefined();
+
+    // Click blink radio
+    act(() => {
+      blinkRadio.checked = true;
+      blinkRadio.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    // Camera should be created
+    expect(mockCreateCamera).toHaveBeenCalled();
+    const cameraSource = mockCreateCamera.mock.results[0].value;
+    expect(cameraSource.start).toHaveBeenCalled();
+  });
+
+  it('camera stops when switching back to spacebar', () => {
+    const mockStop = vi.fn();
+    const mockCreateCamera = vi.fn(() => ({
+      start: vi.fn(),
+      stop: mockStop
+    }));
+
+    act(() => {
+      render(
+        <App
+          speaker={mockSpeaker}
+          now={now}
+          initialStepMs={stepMs}
+          createCamera={mockCreateCamera}
+        />,
+        container
+      );
+    });
+
+    // Switch to blink
+    const radios = container.querySelectorAll('input[type="radio"]');
+    const blinkRadio = Array.from(radios).find((r) => (r as HTMLInputElement).value === 'blink') as HTMLInputElement;
+    act(() => {
+      blinkRadio.checked = true;
+      blinkRadio.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    // Switch back to spacebar
+    const spacebarRadio = Array.from(radios).find((r) => (r as HTMLInputElement).value === 'spacebar') as HTMLInputElement;
+    act(() => {
+      spacebarRadio.checked = true;
+      spacebarRadio.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    // Camera should be stopped
+    expect(mockStop).toHaveBeenCalled();
+  });
+
+  it('carer pause, face lost, face found: ticker stays paused', () => {
+    let faceLostCallback: (() => void) | undefined;
+    let faceFoundCallback: (() => void) | undefined;
+
+    const mockCreateCamera = vi.fn((opts) => {
+      faceLostCallback = opts.onFaceLost;
+      faceFoundCallback = opts.onFaceFound;
+      return {
+        start: vi.fn(),
+        stop: vi.fn()
+      };
+    });
+
+    act(() => {
+      render(
+        <App
+          speaker={mockSpeaker}
+          now={now}
+          initialStepMs={stepMs}
+          createCamera={mockCreateCamera}
+        />,
+        container
+      );
+    });
+
+    // Switch to blink mode
+    const radios = container.querySelectorAll('input[type="radio"]');
+    const blinkRadio = Array.from(radios).find((r) => (r as HTMLInputElement).value === 'blink') as HTMLInputElement;
+    act(() => {
+      blinkRadio.checked = true;
+      blinkRadio.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    // Click pause button
+    const buttons = container.querySelectorAll('button');
+    const pauseButton = Array.from(buttons).find((b) =>
+      b.textContent?.includes('Pause')
+    );
+    act(() => {
+      pauseButton?.click();
+    });
+    expect(pauseButton?.textContent).toBe('Resume');
+
+    // Simulate face lost
+    act(() => {
+      faceLostCallback?.();
+    });
+    expect(container.textContent).toContain("I can't see your face");
+
+    // Simulate face found
+    act(() => {
+      faceFoundCallback?.();
+    });
+    expect(container.textContent).not.toContain("I can't see your face");
+
+    // Pause button should still show Resume (ticker still paused due to carerPaused)
+    expect(pauseButton?.textContent).toBe('Resume');
+  });
 });

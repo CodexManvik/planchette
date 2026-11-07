@@ -4,17 +4,22 @@ import { initialState } from '../core/sweep.js';
 import { board } from '../core/board-content.js';
 import { reduce, AppModel } from './model.js';
 import { Speaker, createSpeaker } from '../output/speaker.js';
-import { createKeyboardSource } from '../input/keyboard.js';
+import { SignalSource, createKeyboardSource } from '../input/keyboard.js';
 import { createSignalFilter } from '../core/filter.js';
 import { createTicker } from './ticker.js';
 import { Board } from './Board.js';
 import { Notices } from './Notices.js';
+import { createCameraSource, CameraSample } from '../input/camera.js';
+import { RecordPanel } from '../record.js';
 import './themes.css';
+
+export type SignalMode = 'spacebar' | 'blink' | 'nod';
 
 export interface AppProps {
   speaker?: Speaker;
   now?: () => number;
   initialStepMs?: number;
+  createCamera?: typeof createCameraSource;
 }
 
 export function App(props?: AppProps) {
@@ -27,7 +32,11 @@ export function App(props?: AppProps) {
 
   const [bellNoticeVisible, setBellNoticeVisible] = useState(false);
   const [lastSpokenMessage, setLastSpokenMessage] = useState<string | null>(null);
-  const [paused, setPaused] = useState(false);
+  const [carerPaused, setCarerPaused] = useState(false);
+  const [faceLost, setFaceLost] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [signalMode, setSignalMode] = useState<SignalMode>('spacebar');
+  const [recordMode] = useState(() => typeof window !== 'undefined' && window.location.search.includes('record=1'));
 
   // Memoize speaker once on first render
   const speakerRef = useRef<Speaker | null>(null);
@@ -47,11 +56,20 @@ export function App(props?: AppProps) {
   // Keep ticker in a ref
   const tickerRef = useRef<ReturnType<typeof createTicker> | null>(null);
 
+  // Keep camera source in a ref
+  const cameraSourceRef = useRef<SignalSource | null>(null);
+
   // Keep bell timeout id in a ref for cleanup
   const bellTimeoutRef = useRef<number | undefined>(undefined);
 
   // Keep track of last processed seq to avoid repeating effects
   const lastProcessedSeqRef = useRef(-1);
+
+  // Keep record sample sink callback in a ref
+  const recordSinkRef = useRef<((sample: CameraSample) => void) | null>(null);
+
+  // Use dependency-injected createCamera or default
+  const createCamera = props?.createCamera ?? createCameraSource;
 
   // Initialize ticker
   useEffect(() => {
@@ -80,6 +98,64 @@ export function App(props?: AppProps) {
 
     return () => source.stop();
   }, []);
+
+  // Camera source lifecycle
+  useEffect(() => {
+    if (signalMode === 'spacebar') {
+      // Stop camera if running
+      if (cameraSourceRef.current) {
+        cameraSourceRef.current.stop();
+        cameraSourceRef.current = null;
+      }
+      return;
+    }
+
+    // Start camera source
+    const filter = createSignalFilter({ refractoryMs: 500 });
+
+    const source = createCamera({
+      mode: signalMode as 'blink' | 'nod',
+      onSelect: () => {
+        const timestamp = nowRef.current();
+        if (filter.accept(timestamp)) {
+          dispatch({ type: 'select' });
+        }
+      },
+      onFaceLost: () => {
+        setFaceLost(true);
+      },
+      onFaceFound: () => {
+        setFaceLost(false);
+      },
+      onError: (message: string) => {
+        setCameraError(message);
+        setSignalMode('spacebar');
+      },
+      onSample: recordMode ? (sample) => {
+        recordSinkRef.current?.(sample);
+      } : undefined
+    });
+
+    source.start(() => {});
+    cameraSourceRef.current = source;
+
+    return () => {
+      source.stop();
+      cameraSourceRef.current = null;
+    };
+  }, [signalMode, recordMode, createCamera]);
+
+  // Sync paused state with ticker (either carerPaused or faceLost)
+  useEffect(() => {
+    if (tickerRef.current) {
+      const shouldPause = carerPaused || faceLost;
+      if (shouldPause) {
+        tickerRef.current.pause();
+      } else {
+        tickerRef.current.resume();
+      }
+    }
+  }, [carerPaused, faceLost]);
 
   // Process effects only when seq changes
   useEffect(() => {
@@ -117,19 +193,11 @@ export function App(props?: AppProps) {
       if (bellTimeoutRef.current !== undefined) {
         clearTimeout(bellTimeoutRef.current);
       }
+      if (cameraSourceRef.current) {
+        cameraSourceRef.current.stop();
+      }
     };
   }, []);
-
-  // Sync paused state with ticker
-  useEffect(() => {
-    if (tickerRef.current) {
-      if (paused) {
-        tickerRef.current.pause();
-      } else {
-        tickerRef.current.resume();
-      }
-    }
-  }, [paused]);
 
   const handleSpeedChange = useCallback((ms: number) => {
     if (tickerRef.current) {
@@ -138,15 +206,23 @@ export function App(props?: AppProps) {
   }, []);
 
   const handleTogglePause = useCallback(() => {
-    setPaused(!paused);
-  }, [paused]);
+    setCarerPaused(!carerPaused);
+  }, [carerPaused]);
+
+  const handleRegisterRecordSink = useCallback((sink: ((sample: CameraSample) => void) | null) => {
+    recordSinkRef.current = sink;
+  }, []);
 
   return (
     <div class="app">
       <Notices
         speechUnavailable={speechUnavailable}
         bellNoticeVisible={bellNoticeVisible}
+        faceLost={faceLost}
+        cameraError={cameraError}
       />
+
+      {recordMode && <RecordPanel onRegisterSink={handleRegisterRecordSink} />}
 
       <div class="patient-display">
         <Board state={model.sweep} board={board} />
@@ -156,6 +232,43 @@ export function App(props?: AppProps) {
       </div>
 
       <div class="carer-controls">
+        <fieldset>
+          <legend>Signal</legend>
+          <label>
+            <input
+              type="radio"
+              name="signal"
+              value="spacebar"
+              checked={signalMode === 'spacebar'}
+              onChange={(e) => setSignalMode(e.currentTarget.value as SignalMode)}
+            />
+            Spacebar only
+          </label>
+          <label>
+            <input
+              type="radio"
+              name="signal"
+              value="blink"
+              checked={signalMode === 'blink'}
+              onChange={(e) => setSignalMode(e.currentTarget.value as SignalMode)}
+            />
+            Blink
+          </label>
+          <label>
+            <input
+              type="radio"
+              name="signal"
+              value="nod"
+              checked={signalMode === 'nod'}
+              onChange={(e) => setSignalMode(e.currentTarget.value as SignalMode)}
+            />
+            Nod
+          </label>
+          {signalMode !== 'spacebar' && (
+            <span class="camera-indicator">Camera on</span>
+          )}
+        </fieldset>
+
         <button
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => handleSpeedChange(2500)}
@@ -178,7 +291,7 @@ export function App(props?: AppProps) {
           onMouseDown={(e) => e.preventDefault()}
           onClick={handleTogglePause}
         >
-          {paused ? 'Resume' : 'Pause'}
+          {carerPaused ? 'Resume' : 'Pause'}
         </button>
       </div>
     </div>
