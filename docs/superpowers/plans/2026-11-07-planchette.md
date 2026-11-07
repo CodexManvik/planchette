@@ -90,12 +90,13 @@ interface Suggestion { text: string; kind: 'word' | 'sentence'; }
 interface SweepState {
   layer: Layer;
   nodeId: string;            // current BoardNode for needs and followup
+  path: string[];            // parent BoardNode ids, used by Back
   index: number;             // highlighted option
   fragments: string[];       // follow-up message built so far
   draft: string;             // spelled text
   groupIndex: number | null; // open letter group
   suggestions: Suggestion[];
-  held: { text: string; bell: boolean } | null;
+  held: { text: string; bell: boolean; source: 'board' | 'draft' } | null;
   lastMessage: string | null;
   idleSweeps: number;
 }
@@ -103,7 +104,7 @@ interface SweepState {
 type SweepEvent =
   | { type: 'tick' }
   | { type: 'select' }
-  | { type: 'suggestions'; items: Suggestion[] };
+  | { type: 'suggestions'; items: Suggestion[]; forDraft: string };
 
 type Effect =
   | { type: 'speak'; text: string }
