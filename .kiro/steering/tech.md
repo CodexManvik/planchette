@@ -25,7 +25,7 @@ inclusion: always
 
 ## Backend (Optional)
 
-- **AWS Lambda** with **Amazon Bedrock** — Claude Haiku for word and sentence suggestions (only for spelled text, no video or patient identity).
+- **AWS Lambda** with **Amazon Bedrock** — Claude Haiku for sentence suggestions (only for spelled text, no video or patient identity).
 - **GitHub Pages** — public HTTPS hosting.
 
 ## Hardware (Optional)
